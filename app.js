@@ -134,65 +134,34 @@ function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<"
 /* ===================== 体のイラスト（提供画像＋ポリゴンオーバーレイ） ===================== */
 
 const BODY_IMG = { src: "body.png", w: 1536, h: 1024 };
-const AX_FRONT = 894, AX_BACK = 2175, SHIFT_FB = 640;
 
-const RAW_POLYS = {
-  head:    [[352,130],[357,88],[380,52],[412,29],[447,23],[482,29],[514,52],[537,88],[542,130],[500,112],[447,108],[394,112]],
-  face:    [[350,138],[394,116],[447,112],[500,116],[544,138],[538,170],[520,200],[492,220],[447,228],[402,220],[374,200],[356,170]],
-  eyes:    [[385,120],[509,120],[509,158],[385,158]],
-  neck:    [[399,214],[499,214],[502,264],[396,264]],
-  chest:   [[396,266],[498,266],[524,272],[552,284],[572,298],[578,312],[541,332],[536,368],[528,420],[536,475],[546,520],[550,560],[548,584],[346,584],[344,560],[348,520],[358,475],[366,420],[358,368],[353,332],[316,312],[322,298],[342,284],[370,272]],
-  genital: [[400,584],[496,584],[482,630],[448,648],[414,630]],
-  armR:    [[318,294],[350,316],[354,338],[342,392],[328,430],[310,472],[294,510],[276,548],[260,585],[248,620],[234,652],[210,668],[186,652],[178,618],[192,578],[212,538],[230,500],[248,460],[266,420],[280,382],[290,340],[296,314]],
-  legR:    [[352,592],[440,608],[438,655],[429,705],[424,765],[420,825],[410,882],[408,942],[400,1002],[326,1002],[330,970],[349,940],[352,878],[351,820],[358,762],[358,700],[352,648],[348,618]],
-  headB:   [[992,132],[997,88],[1020,52],[1052,29],[1087,23],[1122,29],[1154,52],[1177,88],[1182,132],[1177,165],[1156,195],[1130,212],[1087,218],[1044,212],[1018,195],[997,165]],
-  neckB:   [[1039,214],[1139,214],[1142,266],[1036,266]],
-  back:    [[1036,268],[1142,268],[1168,274],[1196,286],[1216,300],[1222,314],[1181,334],[1176,370],[1170,424],[1178,478],[998,478],[1006,424],[1000,370],[995,334],[954,314],[960,300],[980,286],[1008,274]],
-  hip:     [[998,478],[1178,478],[1186,516],[1190,556],[1186,596],[1160,622],[1120,632],[1087,624],[1054,632],[1014,622],[988,596],[984,556],[988,516]],
-  handR:   [[196,526],[250,538],[264,556],[256,588],[240,608],[214,618],[188,606],[172,576],[178,548]],
-  elbowR:  [[268,412],[334,424],[302,482],[240,468]],
-  kneeR:   [[356,708],[430,712],[423,792],[348,788]],
-};
-const pMirror = (poly, ax) => poly.map(([x, y]) => [ax - x, y]);
-const pShift  = (poly, dx) => poly.map(([x, y]) => [x + dx, y]);
+/* ポリゴンは parts_data.js から。editor.html の下書き(localStorage)があればそれを優先表示 */
+const VIEW_POLYS = (() => {
+  try {
+    const draft = localStorage.getItem("atopy.polysDraft");
+    if (draft) {
+      const d = JSON.parse(draft);
+      if (d && d.front && d.back) return d;
+    }
+  } catch (e) {}
+  return window.BODY_PARTS_DATA;
+})();
 
-const VIEW_POLYS = {
-  front: {
-    head: RAW_POLYS.head, face: RAW_POLYS.face, eyes: RAW_POLYS.eyes, neck: RAW_POLYS.neck,
-    chest: RAW_POLYS.chest,
-    armR: RAW_POLYS.armR, armL: pMirror(RAW_POLYS.armR, AX_FRONT),
-    legR: RAW_POLYS.legR, legL: pMirror(RAW_POLYS.legR, AX_FRONT),
-    elbowR: RAW_POLYS.elbowR, elbowL: pMirror(RAW_POLYS.elbowR, AX_FRONT),
-    kneeR: RAW_POLYS.kneeR, kneeL: pMirror(RAW_POLYS.kneeR, AX_FRONT),
-    handR: RAW_POLYS.handR, handL: pMirror(RAW_POLYS.handR, AX_FRONT),
-    genital: RAW_POLYS.genital,
-  },
-  back: {
-    head: RAW_POLYS.headB, neck: RAW_POLYS.neckB, back: RAW_POLYS.back,
-    armL: pShift(RAW_POLYS.armR, SHIFT_FB), armR: pMirror(pShift(RAW_POLYS.armR, SHIFT_FB), AX_BACK),
-    legL: pShift(RAW_POLYS.legR, SHIFT_FB), legR: pMirror(pShift(RAW_POLYS.legR, SHIFT_FB), AX_BACK),
-    hip: RAW_POLYS.hip,
-    elbowL: pShift(RAW_POLYS.elbowR, SHIFT_FB), elbowR: pMirror(pShift(RAW_POLYS.elbowR, SHIFT_FB), AX_BACK),
-    kneeL: pShift(RAW_POLYS.kneeR, SHIFT_FB), kneeR: pMirror(pShift(RAW_POLYS.kneeR, SHIFT_FB), AX_BACK),
-    handL: pShift(RAW_POLYS.handR, SHIFT_FB), handR: pMirror(pShift(RAW_POLYS.handR, SHIFT_FB), AX_BACK),
-  },
-};
+/* バッジ位置 = ポリゴンの重心（面積重心） */
+function polyCentroid(poly) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length];
+    const cr = x1 * y2 - x2 * y1;
+    a += cr; cx += (x1 + x2) * cr; cy += (y1 + y2) * cr;
+  }
+  if (Math.abs(a) < 1e-6) return poly[0];
+  return [cx / (3 * a), cy / (3 * a)];
+}
 /* 描画順: 小さい部位・重なる部位が後（クリック優先・色が見える） */
 const VIEW_ORDER = {
   front: ["head", "face", "eyes", "neck", "chest", "armR", "armL", "legR", "legL", "elbowR", "elbowL", "kneeR", "kneeL", "handR", "handL", "genital"],
   back:  ["head", "neck", "back", "armL", "armR", "legL", "legR", "hip", "elbowL", "elbowR", "kneeL", "kneeR", "handL", "handR"],
-};
-const BADGE_POS = {
-  front: {
-    head: [447,52], face: [447,196], eyes: [447,138], neck: [447,240], chest: [447,420], genital: [447,614],
-    armR: [238,600], armL: [656,600], legR: [388,850], legL: [506,850],
-    elbowR: [287,447], elbowL: [607,447], kneeR: [389,750], kneeL: [505,750], handR: [218,572], handL: [676,572],
-  },
-  back: {
-    head: [1087,110], neck: [1087,240], back: [1087,380], hip: [1087,545],
-    armL: [878,600], armR: [1297,600], legL: [1028,850], legR: [1147,850],
-    elbowL: [927,447], elbowR: [1248,447], kneeL: [1029,750], kneeR: [1145,750], handL: [858,572], handR: [1317,572],
-  },
 };
 const VIEWBOX = { front: "150 0 610 1024", back: "790 0 600 1024" };
 
@@ -204,6 +173,7 @@ function figureSvg(view, opts) {
 
   for (const part of VIEW_ORDER[view]) {
     const poly = VIEW_POLYS[view][part];
+    if (!poly) continue;
     const color = a[part];
     const cls = "bodyPart" + (selSet.has(part) ? " selecting" : "");
     const fill = color ? ` style="fill:${color};fill-opacity:.45"` : "";
@@ -212,9 +182,9 @@ function figureSvg(view, opts) {
   }
 
   for (const p in badges) {
-    const pos = BADGE_POS[view][p];
-    if (!pos) continue;
-    const [x, y] = pos;
+    const poly = VIEW_POLYS[view][p];
+    if (!poly) continue;
+    const [x, y] = polyCentroid(poly);
     const col = a[p] || "#888";
     shapes.push(`<g pointer-events="none"><circle cx="${x}" cy="${y}" r="24" fill="${col}" stroke="#fff" stroke-width="4"/><text x="${x}" y="${y + 10}" text-anchor="middle" font-size="30" font-weight="bold" fill="#fff">${badges[p]}</text></g>`);
   }
@@ -246,7 +216,7 @@ function sentenceFrom(n, cat, freq, rulesArr) {
   for (const r of rulesArr) {
     if (r[0] === "keep") parts.push(`次回の受診まで続ける`);
     if (r[0] === "sw") parts.push(`改善したら${r[1]}へ置き換え`);
-    if (r[0] === "pa") parts.push(`よくなったら「プロアクティブ療法」で少しずつ減らす（ぬらない日は${r[1]}・下の説明を参照）`);
+    if (r[0] === "pa") parts.push(`よくなったら「プロアクティブ療法」で少しずつ減らす（🌱下の説明）`);
     if (r[0] === "end") parts.push(`改善したらぬるのを終了してよい`);
     if (r[0] === "fl") parts.push(`悪化しているところには${r[1]}をぬる`);
     if (r[0] === "fr") parts.push(r[1]);
@@ -592,6 +562,7 @@ function proactiveNoteHtml(payloadItems) {
 function renderPatient(payload) {
   document.getElementById("doctorView").style.display = "none";
   const v = $("patientView");
+  v.className = "";
   v.style.display = "";
 
   const assign = {}, badges = {};
@@ -601,19 +572,24 @@ function renderPatient(payload) {
     const col = COLORS[i % COLORS.length];
     return `<div class="ptInstrItem">
       <span class="num" style="background:${col}">${i + 1}</span>
-      <div><div class="parts">${it.p.map(p => PARTS[p] ? PARTS[p].name : p).join("・")}</div>
-      <div class="how">${esc(sentenceFrom(it.n, it.c, it.f, it.r))}</div></div></div>`;
+      <div><span class="parts">${it.p.map(p => PARTS[p] ? PARTS[p].name : p).join("・")}</span><span class="how">${esc(sentenceFrom(it.n, it.c, it.f, it.r))}</span></div></div>`;
   }).join("");
 
   v.innerHTML = `<div class="ptWrap">
-    <div class="ptHeader"><h1>ぬり薬の説明</h1><div class="date">${esc(payload.d)}</div></div>
-    <div class="ptSave">📱 この画面は<strong>スクリーンショットで保存</strong>して、おうちでぬるときに見てください。</div>
-    <div class="ptFigures">${figureSvg("front", { assign, badges, width: 165, plain: true })}${figureSvg("back", { assign, badges, width: 165, plain: true })}</div>
+    <div class="ptHeader"><h1>ぬり薬の説明</h1><span class="date">${esc(payload.d)}</span><span class="ptSaveInline">📱 スクリーンショットで保存してください</span></div>
+    <div class="ptFigures">${figureSvg("front", { assign, badges, plain: true })}${figureSvg("back", { assign, badges, plain: true })}</div>
     <div class="ptInstr">${items}</div>
     ${proactiveNoteHtml(payload.it)}
-    <div class="ptFtu">💡 <b>ぬる量のめやす（1FTU）</b>：大人の人さし指の先から第1関節まで、チューブから出した量（約0.5g）が、<b>大人の手のひら2枚分</b>の広さに塗る量です。ローションは1円玉大が同じ量のめやすです。すりこまず、皮ふがしっとり光るくらいにやさしく のばしてください。</div>
-    <div class="ptFooter">この説明は医師の指示にもとづいて作成されています。症状が悪化する場合は受診してください。</div>
+    <div class="ptFtu">💡 <b>ぬる量のめやす</b>：大人の人さし指の先端〜第1関節分（1FTU・約0.5g）＝大人の手のひら2枚分の広さ。ローションは1円玉大が同量。すりこまず、しっとり光るくらいにのばす。</div>
   </div>`;
+
+  // 1画面に収まらないときは段階的に圧縮（スクショ1枚運用のため）
+  setTimeout(() => {
+    for (const cls of ["ptTight", "ptTighter"]) {
+      if (document.body.scrollHeight > window.innerHeight) v.classList.add(cls);
+      else break;
+    }
+  }, 0);
 }
 
 /* ===================== 印刷 ===================== */

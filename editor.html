@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>部位エリア調整 - ぬり薬ナビ</title>
+<style>
+:root{--accent:#0f7fa8;--line:#d8e2ea;--ink:#1a2733}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;background:#eef3f7;color:var(--ink);overscroll-behavior:none}
+header{background:linear-gradient(135deg,#0f7fa8,#15a08b);color:#fff;padding:.5em .8em;font-size:1rem;display:flex;justify-content:space-between;align-items:center}
+header a{color:#fff;font-size:.8rem}
+.bar{display:flex;flex-wrap:wrap;gap:.4em;align-items:center;padding:.5em .8em;background:#fff;border-bottom:1px solid var(--line)}
+.bar select,.bar button{font-family:inherit;font-size:.9rem;padding:.45em .7em;border:1.5px solid var(--line);border-radius:8px;background:#fff}
+.bar button{cursor:pointer}
+.bar button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+.bar button.warn{color:#c0392b;border-color:#c0392b}
+.bar .sp{flex:1}
+#stage{touch-action:none;display:block;width:100%;height:calc(100vh - 130px);background:#dfe8ee}
+.hint{font-size:.75rem;color:#5b6b7a;padding:.3em .8em;background:#fff}
+.vtx{fill:#fff;stroke:var(--accent);cursor:grab}
+.vtx.sel{fill:#e0303a;stroke:#fff}
+.mid{fill:#ffd75e;stroke:#c98a12;opacity:.85;cursor:copy}
+#toast{position:fixed;bottom:1em;left:50%;transform:translateX(-50%);background:#1a2733;color:#fff;padding:.5em 1.2em;border-radius:99px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none}
+</style>
+</head>
+<body>
+<header>
+  <span>🖊 部位エリア調整エディタ</span>
+  <a href="index.html" target="_blank">アプリで下書きをプレビュー ▶</a>
+</header>
+<div class="bar">
+  <select id="partSel"></select>
+  <button id="zoomIn">🔍＋</button>
+  <button id="zoomOut">🔍−</button>
+  <button id="fit">全体</button>
+  <button id="undoBtn">↩ 戻す</button>
+  <button id="delVtx" class="warn" disabled>頂点を削除</button>
+  <span class="sp"></span>
+  <button id="resetPart" class="warn">この部位を元に戻す</button>
+  <button id="discardDraft" class="warn">下書きを全部破棄</button>
+  <button id="exportBtn" class="primary">💾 書き出し</button>
+</div>
+<div class="hint">部位を選ぶ → ○をドラッグで移動｜辺の◇をドラッグで頂点追加｜○をタップして「頂点を削除」｜編集は自動で下書き保存され、「アプリで下書きをプレビュー」で確認できます（この端末のみ）。完成したら「書き出し」で parts_data.js を保存して置き換えてください。</div>
+<svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+<div id="toast"></div>
+
+<script src="parts_data.js"></script>
+<script>
+"use strict";
+const IMG = { src: "body.png", w: 1536, h: 1024 };
+const PART_NAMES = {
+  head:"頭部", face:"顔", eyes:"目の周り", neck:"頸部", chest:"胸腹部", back:"背部",
+  armR:"右上肢", armL:"左上肢", elbowR:"右肘", elbowL:"左肘", handR:"右手", handL:"左手",
+  legR:"右下肢", legL:"左下肢", kneeR:"右膝", kneeL:"左膝", genital:"陰部", hip:"臀部",
+};
+const DEFAULTS = JSON.parse(JSON.stringify(window.BODY_PARTS_DATA));
+let data = (() => {
+  try {
+    const d = JSON.parse(localStorage.getItem("atopy.polysDraft"));
+    if (d && d.front && d.back) return d;
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(window.BODY_PARTS_DATA));
+})();
+
+let curView = "front", curPart = "head";
+let selVtx = -1;
+let undoStack = [];
+let vb = { x: 0, y: 0, w: IMG.w, h: IMG.h };
+
+const stage = document.getElementById("stage");
+const $ = id => document.getElementById(id);
+
+/* ---- 部位セレクタ（前面/背面まとめて） ---- */
+function fillPartSel() {
+  const opt = (view, part) => `<option value="${view}.${part}">${view === "front" ? "前面" : "背面"}：${PART_NAMES[part] || part}</option>`;
+  const f = Object.keys(data.front).map(p => opt("front", p)).join("");
+  const b = Object.keys(data.back).map(p => opt("back", p)).join("");
+  $("partSel").innerHTML = `<optgroup label="前面">${f}</optgroup><optgroup label="背面">${b}</optgroup>`;
+  $("partSel").value = `${curView}.${curPart}`;
+}
+
+function fitView() {
+  if (curView === "front") vb = { x: 130, y: 0, w: 650, h: 1024 };
+  else vb = { x: 770, y: 0, w: 650, h: 1024 };
+  render();
+}
+
+function zoom(f) {
+  const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
+  vb.w *= f; vb.h *= f;
+  vb.x = cx - vb.w / 2; vb.y = cy - vb.h / 2;
+  render();
+}
+
+function saveDraft() {
+  localStorage.setItem("atopy.polysDraft", JSON.stringify(data));
+}
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.opacity = 0, 1800);
+}
+
+/* ---- 描画 ---- */
+function render() {
+  const poly = data[curView][curPart];
+  const s = vb.w / stage.clientWidth;           // 画像px / 画面px
+  const rV = 9 * s, rM = 6 * s;
+  const others = Object.entries(data[curView])
+    .filter(([p]) => p !== curPart)
+    .map(([p, poly2]) => `<polygon points="${poly2.map(q => q.join(",")).join(" ")}" fill="none" stroke="#9db4c4" stroke-width="${1.5 * s}" stroke-dasharray="${4 * s} ${4 * s}"/>`)
+    .join("");
+  const cur = `<polygon points="${poly.map(q => q.join(",")).join(" ")}" fill="rgba(15,127,168,.25)" stroke="#0f7fa8" stroke-width="${2.5 * s}"/>`;
+  const mids = poly.map((q, i) => {
+    const n = poly[(i + 1) % poly.length];
+    const mx = (q[0] + n[0]) / 2, my = (q[1] + n[1]) / 2;
+    return `<rect class="mid" data-mid="${i}" x="${mx - rM}" y="${my - rM}" width="${rM * 2}" height="${rM * 2}" transform="rotate(45 ${mx} ${my})" stroke-width="${1.5 * s}"/>`;
+  }).join("");
+  const vtxs = poly.map((q, i) =>
+    `<circle class="vtx${i === selVtx ? " sel" : ""}" data-vtx="${i}" cx="${q[0]}" cy="${q[1]}" r="${i === selVtx ? rV * 1.3 : rV}" stroke-width="${2.5 * s}"/>`).join("");
+  stage.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  stage.innerHTML = `<image href="${IMG.src}" x="0" y="0" width="${IMG.w}" height="${IMG.h}"/>` + others + cur + mids + vtxs;
+  $("delVtx").disabled = selVtx < 0 || poly.length <= 3;
+}
+
+/* ---- 座標変換 ---- */
+function toImg(ev) {
+  const r = stage.getBoundingClientRect();
+  const px = (ev.clientX - r.left) / r.width, py = (ev.clientY - r.top) / r.height;
+  return [vb.x + px * vb.w, vb.y + py * vb.h];
+}
+
+/* ---- ポインタ操作 ---- */
+let drag = null; // {type:'vtx'|'pan', idx, startImg, startVb, moved}
+stage.addEventListener("pointerdown", ev => {
+  ev.preventDefault();
+  stage.setPointerCapture(ev.pointerId);
+  const t = ev.target;
+  const poly = data[curView][curPart];
+  if (t.dataset && t.dataset.vtx !== undefined) {
+    pushUndo();
+    drag = { type: "vtx", idx: +t.dataset.vtx, moved: false };
+    selVtx = drag.idx; render();
+  } else if (t.dataset && t.dataset.mid !== undefined) {
+    pushUndo();
+    const i = +t.dataset.mid;
+    const n = poly[(i + 1) % poly.length];
+    const m = [(poly[i][0] + n[0]) / 2, (poly[i][1] + n[1]) / 2];
+    poly.splice(i + 1, 0, m);
+    drag = { type: "vtx", idx: i + 1, moved: true };
+    selVtx = i + 1; render();
+  } else {
+    drag = { type: "pan", startImg: toImg(ev), startVb: { ...vb }, moved: false };
+  }
+});
+stage.addEventListener("pointermove", ev => {
+  if (!drag) return;
+  ev.preventDefault();
+  if (drag.type === "vtx") {
+    const [x, y] = toImg(ev);
+    data[curView][curPart][drag.idx] = [Math.round(x), Math.round(y)];
+    drag.moved = true;
+    render();
+  } else {
+    const [x, y] = toImg(ev);
+    const dx = x - drag.startImg[0], dy = y - drag.startImg[1];
+    if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+    vb.x -= dx; vb.y -= dy;
+    render();
+  }
+});
+stage.addEventListener("pointerup", ev => {
+  if (drag) {
+    if (drag.type === "vtx" && drag.moved) saveDraft();
+    if (drag.type === "vtx" && !drag.moved) { /* タップ選択のみ */ undoStack.pop(); }
+    if (drag.type === "pan" && !drag.moved) { selVtx = -1; render(); }
+  }
+  drag = null;
+});
+stage.addEventListener("wheel", ev => { ev.preventDefault(); zoom(ev.deltaY > 0 ? 1.15 : 0.87); }, { passive: false });
+
+/* ---- Undo ---- */
+function pushUndo() {
+  undoStack.push(JSON.stringify(data[curView][curPart]));
+  if (undoStack.length > 60) undoStack.shift();
+}
+$("undoBtn").addEventListener("click", () => {
+  const s = undoStack.pop();
+  if (!s) { toast("戻せる操作がありません"); return; }
+  data[curView][curPart] = JSON.parse(s);
+  selVtx = -1; saveDraft(); render();
+});
+
+/* ---- ボタン類 ---- */
+$("partSel").addEventListener("change", ev => {
+  const [v, p] = ev.target.value.split(".");
+  const switchView = v !== curView;
+  curView = v; curPart = p; selVtx = -1; undoStack = [];
+  if (switchView) fitView(); else render();
+});
+$("zoomIn").addEventListener("click", () => zoom(0.75));
+$("zoomOut").addEventListener("click", () => zoom(1.33));
+$("fit").addEventListener("click", fitView);
+$("delVtx").addEventListener("click", () => {
+  const poly = data[curView][curPart];
+  if (selVtx < 0 || poly.length <= 3) return;
+  pushUndo();
+  poly.splice(selVtx, 1);
+  selVtx = -1; saveDraft(); render();
+});
+$("resetPart").addEventListener("click", () => {
+  if (!confirm(`「${PART_NAMES[curPart]}」を parts_data.js の状態に戻しますか？`)) return;
+  pushUndo();
+  data[curView][curPart] = JSON.parse(JSON.stringify(DEFAULTS[curView][curPart]));
+  selVtx = -1; saveDraft(); render();
+});
+$("discardDraft").addEventListener("click", () => {
+  if (!confirm("下書きをすべて破棄して parts_data.js の状態に戻しますか？")) return;
+  localStorage.removeItem("atopy.polysDraft");
+  data = JSON.parse(JSON.stringify(DEFAULTS));
+  selVtx = -1; undoStack = []; render();
+  toast("下書きを破棄しました");
+});
+$("exportBtn").addEventListener("click", () => {
+  const fmt = obj => {
+    const lines = [];
+    for (const view of ["front", "back"]) {
+      lines.push(`  "${view}": {`);
+      const keys = Object.keys(obj[view]);
+      keys.forEach((p, i) => {
+        lines.push(`    "${p}": ${JSON.stringify(obj[view][p])}${i < keys.length - 1 ? "," : ""}`);
+      });
+      lines.push(`  }${view === "front" ? "," : ""}`);
+    }
+    return `/* 部位ポリゴン定義（画像 body.png 1536x1024 のピクセル座標）\n   editor.html で手作業調整 →「書き出し」したものでこのファイルを置き換える */\nwindow.BODY_PARTS_DATA = {\n${lines.join("\n")}\n};\n`;
+  };
+  const txt = fmt(data);
+  const blob = new Blob([txt], { type: "text/javascript" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "parts_data.js";
+  a.click();
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {});
+  toast("parts_data.js をダウンロードしました（クリップボードにもコピー）");
+});
+
+/* ---- 起動 ---- */
+fillPartSel();
+fitView();
+</script>
+</body>
+</html>

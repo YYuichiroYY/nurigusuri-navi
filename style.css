@@ -185,41 +185,49 @@ textarea{width:100%;min-height:3.2em}
 .ointRow .del{background:none;border:none;color:var(--danger);font-size:1.2rem}
 .modalFoot{border-top:1px solid var(--line);padding-top:.9em}
 
-/* ========== 患者ビュー ========== */
-.ptWrap{max-width:640px;margin:0 auto;padding:1em .9em 3em}
+/* ========== 患者ビュー（スマホ1画面・スクショ前提のコンパクト設計） ========== */
+.ptWrap{max-width:480px;margin:0 auto;padding:.5em .6em 1em}
 .ptHeader{
   background:linear-gradient(135deg,#0f7fa8,#15a08b);color:#fff;
-  border-radius:var(--radius);padding:.9em 1em;margin-bottom:1em;
+  border-radius:10px;padding:.45em .8em;margin-bottom:.5em;
+  display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;
 }
-.ptHeader h1{font-size:1.2rem}
-.ptHeader .date{font-size:.85rem;opacity:.92}
-.ptSave{
-  background:#fff7d9;border:1.5px solid #e3c04b;border-radius:10px;
-  padding:.6em .8em;font-size:.88rem;margin-bottom:1em;
-}
-.ptFigures{display:flex;justify-content:center;gap:.5em;flex-wrap:wrap;background:#fff;border-radius:var(--radius);padding:.8em;margin-bottom:1em}
-.ptInstr{background:#fff;border-radius:var(--radius);padding:.9em;margin-bottom:1em}
+.ptHeader h1{font-size:1rem}
+.ptHeader .date{font-size:.75rem;opacity:.92}
+.ptSaveInline{font-size:.7rem;opacity:.95;margin-left:auto}
+.ptFigures{display:flex;justify-content:center;gap:.4em;background:#fff;border-radius:10px;padding:.3em;margin-bottom:.4em}
+.ptFigures figure{flex:1;max-width:49%;text-align:center}
+.ptFigures svg{width:100%;height:auto;max-height:32vh}
+.ptFigures figcaption{font-size:.7rem;color:var(--sub)}
+.ptInstr{background:#fff;border-radius:10px;padding:.3em .55em;margin-bottom:.4em}
 .ptInstrItem{
-  display:flex;gap:.7em;padding:.7em 0;border-bottom:1px dashed var(--line);
-  align-items:flex-start;
+  display:flex;gap:.45em;padding:.3em 0;border-bottom:1px dashed var(--line);
+  align-items:flex-start;line-height:1.4;
 }
 .ptInstrItem:last-child{border-bottom:none}
 .ptInstrItem .num{
-  color:#fff;border-radius:50%;width:1.9em;height:1.9em;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;
+  color:#fff;border-radius:50%;width:1.55em;height:1.55em;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;
 }
-.ptInstrItem .parts{font-weight:700;font-size:1.02rem}
-.ptInstrItem .how{font-size:.98rem;margin-top:.15em}
+.ptInstrItem .parts{font-weight:700;font-size:.86rem;display:inline;margin-right:.4em}
+.ptInstrItem .how{font-size:.84rem}
 .paNote{
-  background:#eefaf3;border:1.5px solid #4caf82;border-radius:var(--radius);
-  padding:.9em 1em;margin-bottom:1em;font-size:.92rem;
+  background:#eefaf3;border:1.5px solid #4caf82;border-radius:10px;
+  padding:.4em .6em;margin-bottom:.4em;font-size:.74rem;line-height:1.4;
 }
-.paNote .paTitle{font-weight:700;color:#1e7a4f;margin-bottom:.4em}
-.paNote ol{padding-left:1.4em}
-.paNote li{margin-bottom:.35em}
-.ptFtu{background:#fff;border-radius:var(--radius);padding:.9em;font-size:.88rem;color:var(--sub)}
+.paNote .paTitle{font-weight:700;color:#1e7a4f;margin-bottom:.1em;font-size:.76rem}
+.paNote ol{padding-left:1.3em}
+.paNote li{margin-bottom:.05em}
+.ptFtu{background:#fff;border-radius:10px;padding:.4em .6em;font-size:.68rem;line-height:1.4;color:var(--sub)}
 .ptFtu b{color:var(--ink)}
-.ptFooter{text-align:center;font-size:.75rem;color:var(--sub);margin-top:1.2em}
+/* 収まらないときの自動圧縮 */
+.ptTight .ptFigures svg{max-height:26vh}
+.ptTight .ptInstrItem .how{font-size:.8rem}
+.ptTight .ptInstrItem .parts{font-size:.82rem}
+.ptTight .paNote{font-size:.7rem}
+.ptTighter .ptFigures svg{max-height:21vh}
+.ptTighter .ptInstrItem{padding:.2em 0}
+.ptTighter .ptFtu{display:none}
 
 /* ========== print ========== */
 #printArea{display:none}
