@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ぬり薬ナビ - アトピー性皮膚炎 外用指導支援</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ========== 医師用 作成画面 ========== -->
+<div id="doctorView">
+  <header class="appHeader">
+    <h1>ぬり薬ナビ <span class="sub">外用指導支援</span></h1>
+    <button id="btnSettings" class="iconBtn" title="設定">⚙ 設定</button>
+  </header>
+
+  <main class="container">
+
+    <!-- STEP 1 部位と塗り方 -->
+    <section class="card">
+      <h2><span class="stepNum">1</span>部位を選んで塗り方を指定</h2>
+      <p class="hint">イラストの部位をタップ → 下で軟膏と塗り方を選んで「指示を追加」</p>
+
+      <div id="figureWrap" class="figureWrap"></div>
+
+      <div id="selectedParts" class="selectedParts"></div>
+
+      <div id="instrForm" class="instrForm">
+        <h3>軟膏を選択</h3>
+        <div id="ointPicker" class="ointPicker"></div>
+
+        <h3>1日の塗布回数</h3>
+        <div class="freqPicker">
+          <label class="chip"><input type="radio" name="freq" value="1">1日1回</label>
+          <label class="chip"><input type="radio" name="freq" value="2" checked>1日2回</label>
+        </div>
+
+        <h3>今後の方針 <span class="hintInline">（1つ選択）</span></h3>
+        <div class="freqPicker courseWrap">
+          <label class="chip"><input type="radio" name="course" value="keep" checked>次回外来まで継続</label>
+          <label class="chip"><input type="radio" name="course" value="sw">改善したら置き換え</label>
+          <label class="chip"><input type="radio" name="course" value="pa">よくなったら置き換え（プロアクティブ）</label>
+          <label class="chip"><input type="radio" name="course" value="end">改善したら終了</label>
+        </div>
+        <div id="courseEditor"></div>
+
+        <h3>追加オプション <span class="hintInline">（必要なものだけタップ）</span></h3>
+        <div class="ruleChips">
+          <button class="ruleChip" data-rule="fl">＋ 増悪部には別の軟膏</button>
+          <button class="ruleChip" data-rule="fr">＋ 自由記載</button>
+        </div>
+        <div id="ruleEditors"></div>
+
+        <div class="previewBox">
+          <div class="previewLabel">指示文プレビュー</div>
+          <div id="instrPreview" class="previewText">—</div>
+        </div>
+
+        <div class="btnRow">
+          <button id="btnAddInstr" class="primaryBtn">この指示を追加</button>
+          <button id="btnSavePreset" class="ghostBtn">★ マイ定型として保存</button>
+          <button id="btnCancelEdit" class="ghostBtn" style="display:none">編集をキャンセル</button>
+        </div>
+
+        <div id="presetArea" class="presetArea"></div>
+      </div>
+
+      <div id="instrList" class="instrList"></div>
+    </section>
+
+    <!-- STEP 2 処方量 -->
+    <section class="card">
+      <h2><span class="stepNum">2</span>処方量の目安（FTU計算）</h2>
+      <p class="hint">処方量を計算したいときだけ入力してください（QR・患者画面には影響しません）。</p>
+      <div class="formRow" style="margin-bottom:.6em">
+        <label>年齢区分
+          <select id="selAge"></select>
+        </label>
+        <label>次回受診まで
+          <select id="selWeeks"></select>
+        </label>
+      </div>
+      <div id="doseArea"></div>
+      <p class="note">※ 1FTU≒0.5g として部位別FTU表から算出した目安です。「改善したら置き換え」は想定切り替え週、「増悪部」は想定面積％で按分しています。実際の処方量は診察所見に応じて調整してください。患者向け画面には表示されません。</p>
+    </section>
+
+    <!-- STEP 3 QR -->
+    <section class="card">
+      <h2><span class="stepNum">3</span>患者さんへ渡す</h2>
+      <div class="btnRow">
+        <button id="btnQR" class="primaryBtn bigBtn">QRコードを表示</button>
+        <button id="btnPrint" class="ghostBtn bigBtn">🖨 A4印刷</button>
+        <button id="btnReset" class="dangerBtn">すべてクリア</button>
+      </div>
+      <div id="qrArea" class="qrArea"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ========== 患者用 表示画面 ========== -->
+<div id="patientView" style="display:none"></div>
+
+<!-- ========== 印刷用 ========== -->
+<div id="printArea"></div>
+
+<!-- ========== 設定モーダル ========== -->
+<div id="settingsModal" class="modalBack" style="display:none">
+  <div class="modal">
+    <h2>設定：採用軟膏マスタ</h2>
+    <p class="hint">診療で使う軟膏を登録してください。ステロイドは群（1〜5）を選ぶとバッジ表示されます。</p>
+    <div class="catalogRow">
+      <select id="catalogSel"></select>
+      <button id="btnCatalogAdd" class="ghostBtn">＋ カタログから追加</button>
+    </div>
+    <div id="ointEditor"></div>
+    <div class="btnRow">
+      <button id="btnAddOint" class="ghostBtn">＋ 自分で入力して追加</button>
+      <button id="btnResetMaster" class="ghostBtn">初期セットに戻す</button>
+    </div>
+    <div class="btnRow modalFoot">
+      <button id="btnSettingsSave" class="primaryBtn">保存して閉じる</button>
+      <button id="btnSettingsCancel" class="ghostBtn">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script src="lib/lz-string.min.js"></script>
+<script src="lib/qrcode.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
