@@ -169,6 +169,7 @@ function figureSvg(view, opts) {
   // opts: {assign: {part: color}, selecting: [parts], badges: {part: num}, width, plain}
   const a = opts.assign || {}, selSet = new Set(opts.selecting || []), badges = opts.badges || {};
   const W = opts.width || 170;
+  const vb = VIEWBOX[view].split(" ").map(Number);
   const shapes = [`<image href="${BODY_IMG.src}" x="0" y="0" width="${BODY_IMG.w}" height="${BODY_IMG.h}"/>`];
 
   for (const part of VIEW_ORDER[view]) {
@@ -184,15 +185,25 @@ function figureSvg(view, opts) {
   for (const p in badges) {
     const poly = VIEW_POLYS[view][p];
     if (!poly) continue;
-    const [x, y] = polyCentroid(poly);
+    const c = polyCentroid(poly);
     const col = a[p] || "#888";
-    shapes.push(`<g pointer-events="none"><circle cx="${x}" cy="${y}" r="24" fill="${col}" stroke="#fff" stroke-width="4"/><text x="${x}" y="${y + 10}" text-anchor="middle" font-size="30" font-weight="bold" fill="#fff">${badges[p]}</text></g>`);
+    let x = c[0], y = c[1], leader = "";
+    if (/^(elbow|knee)/.test(p)) {
+      // 肘・膝はイラストの左右外側にバッジを出し、点線で部位とつなぐ
+      const leftSide = view === "front" ? p.endsWith("R") : p.endsWith("L");
+      x = leftSide ? vb[0] + 34 : vb[0] + vb[2] - 34;
+      leader = `<line x1="${x}" y1="${y}" x2="${c[0]}" y2="${c[1]}" stroke="${col}" stroke-width="4" stroke-dasharray="9 7" opacity=".75"/>`;
+    }
+    shapes.push(`<g pointer-events="none">${leader}<circle cx="${x}" cy="${y}" r="24" fill="${col}" stroke="#fff" stroke-width="4"/><text x="${x}" y="${y + 10}" text-anchor="middle" font-size="30" font-weight="bold" fill="#fff">${badges[p]}</text></g>`);
   }
 
   const cap = opts.plain
     ? (view === "front" ? "からだの前" : "からだのうしろ")
     : (view === "front" ? "前面（向かって右が左半身）" : "背面");
-  return `<figure><svg viewBox="${VIEWBOX[view]}" width="${W}" xmlns="http://www.w3.org/2000/svg">${shapes.join("")}</svg><figcaption>${cap}</figcaption></figure>`;
+  // clipPath: viewBox外の絵（隣の図の手など）が余白にはみ出して見えるのを防ぐ
+  figureSvg._n = (figureSvg._n || 0) + 1;
+  const cid = `figclip_${view}_${figureSvg._n}`;
+  return `<figure><svg viewBox="${VIEWBOX[view]}" width="${W}" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="${cid}"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}"/></clipPath></defs><g clip-path="url(#${cid})">${shapes.join("")}</g></svg><figcaption>${cap}</figcaption></figure>`;
 }
 
 /* 部位→色/番号のマップを作る */
