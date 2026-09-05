@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>部位選択UIの試作 - ぬり薬ナビ</title>
+<style>
+:root{--accent:#0f7fa8;--line:#d8e2ea;--ink:#1a2733;--sub:#5b6b7a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;background:#f2f6f9;color:var(--ink);line-height:1.5;padding-bottom:3em}
+header{background:linear-gradient(135deg,#0f7fa8,#15a08b);color:#fff;padding:.6em .9em}
+header h1{font-size:1rem}
+header p{font-size:.75rem;opacity:.92}
+.panel{background:#fff;margin:.6em;border-radius:12px;padding:.7em .9em;box-shadow:0 1px 4px rgba(20,50,70,.08)}
+.panel h2{font-size:.85rem;color:var(--accent);margin-bottom:.4em}
+.opt{display:flex;align-items:flex-start;gap:.5em;padding:.4em 0;border-bottom:1px dashed var(--line)}
+.opt:last-child{border-bottom:none}
+.opt input{width:1.3em;height:1.3em;accent-color:var(--accent);flex-shrink:0;margin-top:.1em}
+.opt label{font-size:.9rem}
+.opt .d{font-size:.75rem;color:var(--sub);display:block}
+.figs{display:flex;justify-content:center;gap:.4em;background:#fff;margin:.6em;border-radius:12px;padding:.5em}
+.figs figure{flex:1;max-width:50%;text-align:center}
+.figs.one figure{max-width:100%}
+.tab{margin:0 .2em}
+.figs svg{width:100%;height:auto;display:block;touch-action:manipulation}
+body.mode2 .figs svg{touch-action:none}
+.figs figcaption{font-size:.72rem;color:var(--sub);margin-top:.2em}
+.part{fill:transparent;stroke:none;cursor:pointer}
+body.mode1 .part{stroke:#7d9aad;stroke-width:2.5;stroke-dasharray:7 6;opacity:.75}
+.part.sel{fill:#0f7fa8;fill-opacity:.42;stroke:#0f7fa8;stroke-width:3;stroke-dasharray:none;opacity:1}
+.part.prev{fill:#f0a500;fill-opacity:.5;stroke:#c97f00;stroke-width:5;stroke-dasharray:none;opacity:1}
+#chip{position:fixed;z-index:60;background:#1a2733;color:#fff;padding:.35em .8em;border-radius:99px;
+  font-size:1rem;font-weight:700;pointer-events:none;transform:translate(-50%,-100%);display:none;white-space:nowrap;
+  box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#chip.cancel{background:#8a94a0}
+#bar{position:fixed;left:50%;bottom:1em;transform:translateX(-50%);z-index:55;background:#1a2733;color:#fff;
+  padding:.55em .8em;border-radius:12px;font-size:.88rem;display:none;align-items:center;gap:.6em;
+  box-shadow:0 3px 14px rgba(0,0,0,.35);max-width:94vw}
+#bar button{font:inherit;background:#fff;color:#1a2733;border:none;border-radius:8px;padding:.35em .7em;font-weight:700}
+.selList{font-size:.9rem;min-height:1.6em}
+.tag{display:inline-block;background:#e3f2f8;color:var(--accent);border-radius:6px;padding:.1em .55em;margin:.15em;font-weight:600}
+.btn{font:inherit;background:#fff;border:1.5px solid var(--line);border-radius:8px;padding:.45em .9em;font-size:.85rem}
+.note{font-size:.75rem;color:var(--sub);margin-top:.5em}
+</style>
+</head>
+<body class="mode1 mode3">
+<header>
+  <h1>部位選択UIの試作</h1>
+  <p>下のチェックで方式を切り替えて、使い心地を比べてください</p>
+</header>
+
+<div class="panel">
+  <h2>試す方式（組み合わせ可）</h2>
+  <div class="opt">
+    <input type="checkbox" id="m1" checked>
+    <label for="m1">案1：区切り線をいつも表示
+      <span class="d">押す前に、どこが境目か目で分かる</span></label>
+  </div>
+  <div class="opt">
+    <input type="checkbox" id="m2">
+    <label for="m2">案2：指を置いてなぞる → 離して決定
+      <span class="d">触れた部位が光って名前が出る。指を滑らせると隣に移り、離すと確定。図の外に出して離すとキャンセル。<b>この方式の間はイラスト上でページが動きません</b></span></label>
+  </div>
+  <div class="opt">
+    <input type="checkbox" id="m3" checked>
+    <label for="m3">案3：選んだ後に切り替えバー
+      <span class="d">タップ直後に「◯◯を選択／〔△△に変更〕」が出て、1タップで直せる</span></label>
+  </div>
+  <div class="opt">
+    <input type="checkbox" id="m4">
+    <label for="m4">案4：前面／背面を切り替えて大きく表示
+      <span class="d">2枚並べず1枚ずつ大きく出す。スマホでの指標的なタップ範囲が約2倍になる（膝で約20px→40px）</span></label>
+  </div>
+</div>
+
+<div id="tabs" style="display:none;text-align:center;margin:.6em">
+  <button class="btn tab" data-v="front">からだの前</button>
+  <button class="btn tab" data-v="back">からだのうしろ</button>
+</div>
+<div class="figs" id="figs"></div>
+
+<div class="panel">
+  <h2>選択中の部位</h2>
+  <div class="selList" id="selList"></div>
+  <div style="margin-top:.5em"><button class="btn" id="clear">選択をクリア</button></div>
+  <p class="note">※これは操作感を試すための試作です。ここでの選択は保存されず、本体アプリには影響しません。</p>
+</div>
+
+<div id="chip"></div>
+<div id="bar"></div>
+
+<script src="parts_data.js"></script>
+<script>
+"use strict";
+const NAMES = {head:"頭部",face:"顔",eyes:"目の周り",neck:"頸部",chest:"胸腹部",back:"背部",
+  armR:"右上肢",armL:"左上肢",elbowR:"右肘",elbowL:"左肘",handR:"右手",handL:"左手",
+  legR:"右下肢",legL:"左下肢",kneeR:"右膝",kneeL:"左膝",genital:"陰部",hip:"臀部"};
+const ORDER = {
+  front:["head","face","eyes","neck","chest","armR","armL","legR","legL","elbowR","elbowL","kneeR","kneeL","handR","handL","genital"],
+  back:["head","neck","back","armL","armR","legL","legR","hip","elbowL","elbowR","kneeL","kneeR","handL","handR"]
+};
+const VIEWBOX = {front:"150 0 610 1024", back:"790 0 600 1024"};
+const P = window.BODY_PARTS_DATA;
+const $ = id => document.getElementById(id);
+const sel = new Set();
+let preview = null, dragging = false;
+
+let bigView = "front";
+function draw(){
+  const big = document.body.classList.contains("mode4");
+  $("tabs").style.display = big ? "block" : "none";
+  $("figs").classList.toggle("one", big);
+  document.querySelectorAll(".tab").forEach(b=>{
+    b.style.background = (b.dataset.v===bigView) ? "#0f7fa8" : "#fff";
+    b.style.color = (b.dataset.v===bigView) ? "#fff" : "#1a2733";
+  });
+  $("figs").innerHTML = (big ? [bigView] : ["front","back"]).map(view => {
+    const vb = VIEWBOX[view].split(" ").map(Number);
+    const polys = ORDER[view].filter(p => P[view][p]).map(p =>
+      `<polygon class="part" data-view="${view}" data-part="${p}" points="${P[view][p].map(q=>q.join(",")).join(" ")}"/>`).join("");
+    return `<figure><svg viewBox="${VIEWBOX[view]}" xmlns="http://www.w3.org/2000/svg">
+      <defs><clipPath id="c_${view}"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}"/></clipPath></defs>
+      <g clip-path="url(#c_${view})"><image href="body.png" x="0" y="0" width="1536" height="1024"/>${polys}</g>
+      </svg><figcaption>${view==="front"?"からだの前":"からだのうしろ"}</figcaption></figure>`;
+  }).join("");
+  paint();
+}
+
+function key(view,part){ return view+"."+part; }
+function paint(){
+  document.querySelectorAll(".part").forEach(el=>{
+    const k = key(el.dataset.view, el.dataset.part);
+    el.classList.toggle("sel", sel.has(k));
+    el.classList.toggle("prev", !!preview && preview.k === k);
+  });
+  $("selList").innerHTML = sel.size
+    ? [...sel].map(k=>`<span class="tag">${NAMES[k.split(".")[1]]}</span>`).join("")
+    : `<span style="color:var(--sub)">まだ選ばれていません</span>`;
+}
+
+/* --- 点が多角形の内側か --- */
+function inside(pt, poly){
+  let c = false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const [xi,yi]=poly[i],[xj,yj]=poly[j];
+    if((yi>pt[1])!==(yj>pt[1]) && pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi) c=!c;
+  }
+  return c;
+}
+function toSvgPt(svg, cx, cy){
+  const m = svg.getScreenCTM().inverse();
+  const p = new DOMPoint(cx, cy).matrixTransform(m);
+  return [p.x, p.y];
+}
+/* その点を含む全部位（上に描かれている順） */
+function hitsAt(svg, view, cx, cy){
+  const pt = toSvgPt(svg, cx, cy);
+  return ORDER[view].filter(p => P[view][p] && inside(pt, P[view][p])).reverse();
+}
+
+function partAt(cx, cy){
+  const el = document.elementFromPoint(cx, cy);
+  if(!el || !el.classList.contains("part")) return null;
+  return {el, view: el.dataset.view, part: el.dataset.part, k: key(el.dataset.view, el.dataset.part)};
+}
+
+/* --- 案3の切り替えバー --- */
+let barTimer = null;
+function showBar(view, part, cx, cy, svg){
+  if(!document.body.classList.contains("mode3")) return;
+  const alts = hitsAt(svg, view, cx, cy).filter(p => p !== part);
+  const bar = $("bar");
+  bar.innerHTML = `<span><b>${NAMES[part]}</b> を選択</span>` +
+    alts.slice(0,2).map(a=>`<button data-alt="${a}">${NAMES[a]}に変更</button>`).join("") +
+    `<button data-close="1">✕</button>`;
+  bar.style.display = "flex";
+  bar.querySelectorAll("[data-alt]").forEach(b=>b.onclick=()=>{
+    sel.delete(key(view,part));
+    sel.add(key(view, b.dataset.alt));
+    paint(); hideBar();
+  });
+  bar.querySelector("[data-close]").onclick = hideBar;
+  clearTimeout(barTimer);
+  barTimer = setTimeout(hideBar, 5000);
+}
+function hideBar(){ $("bar").style.display="none"; clearTimeout(barTimer); }
+
+/* --- チップ（指の上に出る名前） --- */
+function showChip(text, x, y, cancel){
+  const c = $("chip");
+  c.textContent = text;
+  c.classList.toggle("cancel", !!cancel);
+  c.style.left = x+"px"; c.style.top = (y-26)+"px";
+  c.style.display = "block";
+}
+function hideChip(){ $("chip").style.display="none"; }
+
+function toggle(k){ sel.has(k) ? sel.delete(k) : sel.add(k); }
+
+/* --- イベント --- */
+const figs = $("figs");
+figs.addEventListener("pointerdown", ev=>{
+  const hit = partAt(ev.clientX, ev.clientY);
+  if(!document.body.classList.contains("mode2")){
+    if(hit){ toggle(hit.k); paint(); showBar(hit.view, hit.part, ev.clientX, ev.clientY, hit.el.ownerSVGElement); }
+    return;
+  }
+  ev.preventDefault();
+  dragging = true;
+  hideBar();
+  try { figs.setPointerCapture(ev.pointerId); } catch(e) {}
+  preview = hit;
+  paint();
+  if(hit) showChip(NAMES[hit.part], ev.clientX, ev.clientY);
+  else showChip("指を部位の上へ", ev.clientX, ev.clientY, true);
+});
+figs.addEventListener("pointermove", ev=>{
+  if(!dragging) return;
+  ev.preventDefault();
+  const hit = partAt(ev.clientX, ev.clientY);
+  preview = hit;
+  paint();
+  if(hit) showChip(NAMES[hit.part], ev.clientX, ev.clientY);
+  else showChip("離すとキャンセル", ev.clientX, ev.clientY, true);
+});
+function endDrag(ev, commit){
+  if(!dragging) return;
+  dragging = false;
+  hideChip();
+  const hit = preview;
+  preview = null;
+  if(commit && hit){
+    toggle(hit.k);
+    paint();
+    showBar(hit.view, hit.part, ev.clientX, ev.clientY, hit.el.ownerSVGElement);
+  } else paint();
+}
+figs.addEventListener("pointerup", ev=>endDrag(ev,true));
+figs.addEventListener("pointercancel", ev=>endDrag(ev,false));
+/* マウスの人はホバーでもプレビュー */
+figs.addEventListener("pointerover", ev=>{
+  if(ev.pointerType!=="mouse" || dragging) return;
+  if(!document.body.classList.contains("mode2")) return;
+  const hit = partAt(ev.clientX, ev.clientY);
+  preview = hit; paint();
+  if(hit) showChip(NAMES[hit.part], ev.clientX, ev.clientY); else hideChip();
+});
+figs.addEventListener("pointerleave", ()=>{ if(!dragging){ preview=null; paint(); hideChip(); } });
+
+/* --- 設定 --- */
+[["m1","mode1"],["m2","mode2"],["m3","mode3"],["m4","mode4"]].forEach(([id,cls])=>{
+  $(id).addEventListener("change", e=>{
+    document.body.classList.toggle(cls, e.target.checked);
+    if(cls==="mode2" && !e.target.checked){ hideChip(); preview=null; paint(); }
+    if(cls==="mode3" && !e.target.checked) hideBar();
+    if(cls==="mode4") draw();
+  });
+});
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{ bigView=b.dataset.v; hideBar(); draw(); }));
+$("clear").addEventListener("click", ()=>{ sel.clear(); hideBar(); paint(); });
+
+draw();
+</script>
+</body>
+</html>
