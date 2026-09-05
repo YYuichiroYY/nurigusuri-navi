@@ -341,12 +341,49 @@ function renderSelectedParts() {
     : `<span style="color:var(--sub)">部位が未選択です</span>`;
 }
 
+/* 軟膏のグループ（2段階選択の1段目） */
+const OINT_GROUPS = [
+  { k: "s1", label: "1群", cls: "s1", cats: ["s1"] },
+  { k: "s2", label: "2群", cls: "s2", cats: ["s2"] },
+  { k: "s3", label: "3群", cls: "s3", cats: ["s3"] },
+  { k: "s4", label: "4群", cls: "s4", cats: ["s4"] },
+  { k: "s5", label: "5群", cls: "s5", cats: ["s5"] },
+  { k: "nonst", label: "非ステ", cls: "nonst", cats: ["pde4", "jak", "ns"] },
+  { k: "moist", label: "保湿剤", cls: "moist", cats: ["moist", "base"] },
+  { k: "other", label: "その他", cls: "other", cats: ["other"] },
+];
+const groupOf = cat => (OINT_GROUPS.find(g => g.cats.includes(cat)) || OINT_GROUPS[OINT_GROUPS.length - 1]).k;
+const drugsIn = gk => master.filter(o => groupOf(o.cat) === gk);
+let ointGroup = null;
+
 function renderOintPicker() {
-  $("ointPicker").innerHTML = master.map(o => {
-    const c = CATS[o.cat] || CATS.other;
-    return `<button class="ointBtn${cur.oint === o.id ? " sel" : ""}" data-id="${o.id}">
-      ${c.badge ? `<span class="badge ${c.cls}">${c.badge}</span>` : ""}${esc(o.name)}</button>`;
-  }).join("");
+  // 選択済みの薬があれば、その群を開いた状態にする
+  if (cur.oint && ointById(cur.oint)) ointGroup = groupOf(ointById(cur.oint).cat);
+  const groups = OINT_GROUPS.filter(g => drugsIn(g.k).length);
+  if (ointGroup && !groups.some(g => g.k === ointGroup)) ointGroup = null;
+
+  const groupRow = `<div class="groupRow">${groups.map(g =>
+    `<button class="groupBtn${g.k === ointGroup ? " sel" : ""}" data-g="${g.k}">
+      <span class="badge ${g.cls}">${g.label}</span></button>`).join("")}</div>`;
+
+  const list = ointGroup ? drugsIn(ointGroup) : [];
+  const drugRow = list.length
+    ? `<div class="drugRow">${list.map(o =>
+        `<button class="ointBtn${cur.oint === o.id ? " sel" : ""}" data-id="${o.id}">${esc(o.name)}</button>`).join("")}</div>`
+    : `<div class="drugRow hintInline">上のボタンで種類を選んでください</div>`;
+
+  $("ointPicker").innerHTML = groupRow + drugRow;
+
+  $("ointPicker").querySelectorAll(".groupBtn").forEach(b => {
+    b.addEventListener("click", () => {
+      ointGroup = b.dataset.g;
+      const ds = drugsIn(ointGroup);
+      // その群の薬が1つだけなら、群を押した時点で決定（タップ数を増やさない）
+      if (ds.length === 1) cur.oint = ds[0].id;
+      else if (!ds.some(o => o.id === cur.oint)) cur.oint = null;
+      renderAll();
+    });
+  });
   $("ointPicker").querySelectorAll(".ointBtn").forEach(b => {
     b.addEventListener("click", () => { cur.oint = +b.dataset.id; renderAll(); });
   });
@@ -358,10 +395,14 @@ function renderOintPicker() {
 
 /* --- ルール編集UI --- */
 
-function ointOptions(selId, prefer) {
-  let list = master.slice();
-  if (prefer === "moist") list = list.slice().sort((x, y) => (x.cat === "moist" || x.cat === "base" ? -1 : 1) - (y.cat === "moist" || y.cat === "base" ? -1 : 1));
-  return master.map(o => `<option value="${o.id}"${o.id === selId ? " selected" : ""}>${esc(o.name)}</option>`).join("");
+function ointOptions(selId) {
+  // 群ごとに見出しで区切って選びやすくする
+  return OINT_GROUPS.map(g => {
+    const ds = drugsIn(g.k);
+    if (!ds.length) return "";
+    const opts = ds.map(o => `<option value="${o.id}"${o.id === selId ? " selected" : ""}>${esc(o.name)}</option>`).join("");
+    return `<optgroup label="${g.label}">${opts}</optgroup>`;
+  }).join("");
 }
 
 function defaultMoist() {
@@ -407,9 +448,10 @@ function renderRuleEditors() {
       <select data-f="o">${ointOptions(R.fl.o)}</select>
       <span>｜想定面積：</span><select data-f="pct">${[10, 25, 50].map(v => `<option value="${v}"${v === R.fl.pct ? " selected" : ""}>${v}%</option>`).join("")}</select>
       <button class="rm" title="削除">✕</button></div>`);
-  if (R.fr) eds.push(`<div class="ruleEditor" data-r="fr" style="align-items:flex-start">
+  if (R.fr) eds.push(`<div class="ruleEditor" data-r="fr" style="align-items:flex-start;flex-wrap:wrap">
       <textarea data-f="text" placeholder="自由記載（例：入浴後5分以内にぬる）">${esc(R.fr.text)}</textarea>
-      <button class="rm" title="削除">✕</button></div>`);
+      <button class="rm" title="削除">✕</button>
+      <div class="warnLine">⚠ 氏名・生年月日などの個人情報は書かないでください（この文章はQRコードに含まれます）</div></div>`);
   box.innerHTML = eds.join("");
 
   box.querySelectorAll(".ruleEditor").forEach(ed => {
@@ -583,7 +625,7 @@ function renderPatient(payload) {
     const col = COLORS[i % COLORS.length];
     return `<div class="ptInstrItem">
       <span class="num" style="background:${col}">${i + 1}</span>
-      <div><span class="parts">${it.p.map(p => PARTS[p] ? PARTS[p].name : p).join("・")}</span><span class="how">${esc(sentenceFrom(it.n, it.c, it.f, it.r))}</span></div></div>`;
+      <div><span class="parts">${esc(it.p.map(p => PARTS[p] ? PARTS[p].name : p).join("・"))}</span><span class="how">${esc(sentenceFrom(it.n, it.c, it.f, it.r))}</span></div></div>`;
   }).join("");
 
   v.innerHTML = `<div class="ptWrap">
@@ -592,6 +634,7 @@ function renderPatient(payload) {
     <div class="ptInstr">${items}</div>
     ${proactiveNoteHtml(payload.it)}
     <div class="ptFtu">💡 <b>ぬる量のめやす</b>：大人の人さし指の先端〜第1関節分（1FTU・約0.5g）＝大人の手のひら2枚分の広さ。ローションは1円玉大が同量。すりこまず、しっとり光るくらいにのばす。</div>
+    <div class="ptDisc">この説明は医師の指示にもとづいて作成されています。良くならない・悪化するときは受診してください。</div>
   </div>`;
 
   // 1画面に収まらないときは段階的に圧縮（スクショ1枚運用のため）
@@ -614,7 +657,7 @@ function renderPrint() {
   const items = payload.it.map((it, i) => {
     const col = COLORS[i % COLORS.length];
     return `<div class="pItem"><span class="num" style="background:${col}">${i + 1}</span>
-      <div><b>${it.p.map(p => PARTS[p].name).join("・")}</b><br>${esc(sentenceFrom(it.n, it.c, it.f, it.r))}</div></div>`;
+      <div><b>${esc(it.p.map(p => PARTS[p] ? PARTS[p].name : p).join("・"))}</b><br>${esc(sentenceFrom(it.n, it.c, it.f, it.r))}</div></div>`;
   }).join("");
 
   $("printArea").innerHTML = `
@@ -626,7 +669,7 @@ function renderPrint() {
       </div>
     </div>
     ${proactiveNoteHtml(payload.it)}
-    <div class="pFtuNote">ぬる量のめやす：大人の人さし指の先から第1関節までチューブから出した量（約0.5g）＝大人の手のひら2枚分の広さ。ローションは1円玉大が同量のめやす。すりこまず、皮ふがしっとり光る程度にのばす。</div>`;
+    <div class="pFtuNote">ぬる量のめやす：大人の人さし指の先から第1関節までチューブから出した量（約0.5g）＝大人の手のひら2枚分の広さ。ローションは1円玉大が同量のめやす。すりこまず、皮ふがしっとり光る程度にのばす。<br>この説明は医師の指示にもとづいて作成されています。良くならない・悪化するときは受診してください。</div>`;
   window.print();
 }
 
@@ -742,11 +785,26 @@ function initDoctor() {
 }
 
 function boot() {
+  /* URLから来たデータは信用せず、想定した形だけを通す */
+  function sanitizePayload(d) {
+    if (!d || !Array.isArray(d.it)) return null;
+    const str = (v, max) => String(v == null ? "" : v).slice(0, max);
+    const it = d.it.filter(x => x && Array.isArray(x.p)).map(x => ({
+      p: x.p.filter(p => Object.prototype.hasOwnProperty.call(PARTS, p)),
+      n: str(x.n, 80),
+      c: Object.prototype.hasOwnProperty.call(CATS, x.c) ? x.c : "other",
+      f: x.f === 1 ? 1 : 2,
+      r: (Array.isArray(x.r) ? x.r : []).filter(r => Array.isArray(r) && r.length)
+        .map(r => [str(r[0], 4), str(r[1], 200)]).slice(0, 6),
+    })).filter(x => x.p.length && x.n).slice(0, 12);
+    return it.length ? { v: d.v, d: str(d.d, 24), it } : null;
+  }
+
   const m = location.hash.match(/^#p=(.+)$/);
   if (m) {
     try {
-      const payload = JSON.parse(LZString.decompressFromEncodedURIComponent(m[1]));
-      if (payload && payload.it) { renderPatient(payload); return; }
+      const payload = sanitizePayload(JSON.parse(LZString.decompressFromEncodedURIComponent(m[1])));
+      if (payload) { renderPatient(payload); return; }
     } catch (e) { /* fallthrough */ }
   }
   initDoctor();
